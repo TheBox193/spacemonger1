@@ -841,10 +841,7 @@ public class FolderView {
         list1sum = list2sum = 0;
 
         for (int largest = 0; largest < numindices; largest++) {
-            long bignum = folder.sizes[index[largest]];
-            if (folder.isHidden(index[largest])) {
-                bignum = 0;
-            }
+            long bignum = folder.visibleSizeForIndex(index[largest]);
             if (folder.names[index[largest]].charAt(0) == '<' && !appCommands.showFreeSpace()) {
                 bignum = 0;
             }

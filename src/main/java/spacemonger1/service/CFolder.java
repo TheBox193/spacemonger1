@@ -223,6 +223,24 @@ public class CFolder {
         hidden[index] = value;
     }
 
+    public long visibleSize() {
+        long total = 0;
+        for (int i = 0; i < cur; i++) {
+            total += visibleSizeForIndex(i);
+        }
+        return total;
+    }
+
+    public long visibleSizeForIndex(int index) {
+        if (hidden[index]) {
+            return 0;
+        }
+        if (children[index] != null) {
+            return children[index].visibleSize();
+        }
+        return sizes[index];
+    }
+
     public boolean hasHiddenEntries() {
         for (int i = 0; i < cur; i++) {
             if (hidden[i]) {
