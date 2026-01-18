@@ -22,6 +22,7 @@ public class CFolder {
         actualsizes = new long[max];
         children = new CFolder[max];
         times = new long[max];
+        hidden = new boolean[max];
         sizeSelf = sizeChildren = 0;
         parent = null;
         parentindex = 0;
@@ -33,6 +34,7 @@ public class CFolder {
         sizes[cur] = size;
         actualsizes[cur] = actualSize;
         times[cur] = time;
+        hidden[cur] = false;
         sizeSelf += size;
         if (!name.startsWith(">>>>")) { // 'free space' file
             tree.filespace += size;
@@ -52,6 +54,7 @@ public class CFolder {
         sizeChildren += folder.SizeTotal();
         actualsizes[cur] = sizes[cur];
         times[cur] = time;
+        hidden[cur] = false;
         children[cur] = folder;
         folder.parent = this;
         folder.parentindex = cur;
@@ -106,18 +109,21 @@ public class CFolder {
         var newactualsizes = new long[newmax];
         var newchildren = new CFolder[newmax];
         var newtimes = new long[newmax];
+        var newhidden = new boolean[newmax];
 
         System.arraycopy(names, 0, newnames, 0, max);
         System.arraycopy(sizes, 0, newsizes, 0, max);
         System.arraycopy(actualsizes, 0, newactualsizes, 0, max);
         System.arraycopy(children, 0, newchildren, 0, max);
         System.arraycopy(times, 0, newtimes, 0, max);
+        System.arraycopy(hidden, 0, newhidden, 0, max);
 
         names = newnames;
         sizes = newsizes;
         actualsizes = newactualsizes;
         children = newchildren;
         times = newtimes;
+        hidden = newhidden;
         max = newmax;
     }
 
@@ -209,6 +215,53 @@ public class CFolder {
         }
     }
 
+    public boolean isHidden(int index) {
+        return hidden[index];
+    }
+
+    public void setHidden(int index, boolean value) {
+        hidden[index] = value;
+    }
+
+    public long visibleSize() {
+        long total = 0;
+        for (int i = 0; i < cur; i++) {
+            total += visibleSizeForIndex(i);
+        }
+        return total;
+    }
+
+    public long visibleSizeForIndex(int index) {
+        if (hidden[index]) {
+            return 0;
+        }
+        if (children[index] != null) {
+            return children[index].visibleSize();
+        }
+        return sizes[index];
+    }
+
+    public boolean hasHiddenEntries() {
+        for (int i = 0; i < cur; i++) {
+            if (hidden[i]) {
+                return true;
+            }
+            if (children[i] != null && children[i].hasHiddenEntries()) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public void clearHiddenEntries() {
+        for (int i = 0; i < cur; i++) {
+            hidden[i] = false;
+            if (children[i] != null) {
+                children[i].clearHiddenEntries();
+            }
+        }
+    }
+
     // Public fields (Java style typically uses private + getters/setters, but matching C++ public access)
     public CFolder parent;
     public int parentindex;
@@ -218,6 +271,7 @@ public class CFolder {
     public long[] sizes;
     public long[] actualsizes;
     public long[] times;
+    public boolean[] hidden;
     public long sizeSelf;
     public long sizeChildren;
 

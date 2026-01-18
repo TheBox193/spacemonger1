@@ -247,6 +247,26 @@ public class FolderView {
         onSize(0, getWidth(), getHeight());
     }
 
+    private void hideSelected() {
+        if (selected == null) {
+            return;
+        }
+        selected.source.setHidden(selected.index, true);
+        selected = null;
+        appCommands.updated();
+        onSize(0, getWidth(), getHeight());
+    }
+
+    private void unhideAll() {
+        if (rootfolder == null) {
+            return;
+        }
+        rootfolder.clearHiddenEntries();
+        selected = null;
+        appCommands.updated();
+        onSize(0, getWidth(), getHeight());
+    }
+
     public void setDocument(CFolderTree doc) {
         document = doc;
         if (doc != null) {
@@ -679,6 +699,11 @@ public class FolderView {
         delete.setEnabled(deleteEnabled);
         menu.add(delete);
 
+        JMenuItem hide = new JMenuItem(appCommands.lang().hide);
+        hide.addActionListener(_ -> hideSelected());
+        hide.setEnabled(cur != null);
+        menu.add(hide);
+
         menu.addSeparator();
 
         // Open Drive
@@ -695,6 +720,12 @@ public class FolderView {
         JCheckBoxMenuItem showFree = new JCheckBoxMenuItem(appCommands.lang().showfreespace, appCommands.showFreeSpace());
         showFree.addActionListener(_ -> appCommands.toggleFreeSpace());
         menu.add(showFree);
+
+        if (rootfolder != null && rootfolder.hasHiddenEntries()) {
+            JMenuItem unhideAll = new JMenuItem(appCommands.lang().unhide_all);
+            unhideAll.addActionListener(_ -> unhideAll());
+            menu.add(unhideAll);
+        }
 //
 //        menu.addSeparator();
 //
@@ -810,7 +841,7 @@ public class FolderView {
         list1sum = list2sum = 0;
 
         for (int largest = 0; largest < numindices; largest++) {
-            long bignum = folder.sizes[index[largest]];
+            long bignum = folder.visibleSizeForIndex(index[largest]);
             if (folder.names[index[largest]].charAt(0) == '<' && !appCommands.showFreeSpace()) {
                 bignum = 0;
             }
