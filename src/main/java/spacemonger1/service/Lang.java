@@ -28,6 +28,7 @@ public class Lang {
     public String freespace_format;
     public String zoomin, zoomout, zoomfull, run, del;
     public String opendrive, rescandrive, showfreespace;
+    public String hide, unhide_all;
     public String percent_format, size_format;
     public String total, free, files_total, folders_total, files_found, folders_found;
     public char digitpt, digitcomma;
@@ -84,6 +85,8 @@ public class Lang {
         lang.opendrive = props.getProperty("opendrive");
         lang.rescandrive = props.getProperty("rescandrive");
         lang.showfreespace = props.getProperty("showfreespace");
+        lang.hide = props.getProperty("hide");
+        lang.unhide_all = props.getProperty("unhide_all");
         lang.percent_format = props.getProperty("percent_format");
         lang.size_format = props.getProperty("size_format");
         lang.total = props.getProperty("total");
