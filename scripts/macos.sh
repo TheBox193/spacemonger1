@@ -1,18 +1,36 @@
-#!/usr/bin/env bash
+#!/bin/bash
 set -euo pipefail
 
-repo_root="$(cd -- "$(dirname "$0")/.." && pwd)"
-app_name="SpaceMonger1"
-app_bundle="${app_name}.app"
-app_path="$repo_root/$app_bundle"
-build_dir="$repo_root/build"
-classes_dir="$build_dir/classes"
-jar_path="$build_dir/libs/spacemonger1.jar"
-icon_source="$repo_root/src/main/resources/SpaceMonger.png"
-icon_file="SpaceMonger1.icns"
-runtime_dir="$build_dir/runtime-macos-arm64"
-tmp_iconset=""
-tmp_icns=""
+if [ $# -ne 1 ]; then
+    echo "Error: Please provide version as an argument."
+    exit 1
+fi
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$SCRIPT_DIR/.."
+DIST_ROOT="$ROOT/dist/$1"
+BUILD_ROOT="$ROOT/build"
+tmp_iconset="$BUILD_ROOT/iconset"
+tmp_icns="$BUILD_ROOT/SpaceMonger1.icns"
+app_name=SpaceMonger1
+app_path="$BUILD_ROOT/spacemonger1.app"
+JDK_JMODS_DIR="$HOME/dev/jdk-25-macos/Contents/Home/jmods"
+if [ ! -d "$JDK_JMODS_DIR" ]; then
+    echo "JDK jmods not found: $JDK_JMODS_DIR"
+    exit 1
+fi
+
+
+cleanup() {
+  rm -rf "$BUILD_ROOT/spacemonger1" || true
+  rm -rf "$tmp_icns" || true
+  rm -rf "$tmp_iconset" || true
+  rm -rf "$app_path" || true
+}
+cleanup
+trap cleanup EXIT
+
+mkdir -p "$DIST_ROOT" "$tmp_iconset"
 
 require_cmd() { command -v "$1" >/dev/null 2>&1 || { echo "Missing required command: $1" >&2; exit 1; }; }
 
@@ -21,51 +39,29 @@ require_cmd java
 require_cmd javac
 require_cmd jar
 require_cmd jlink
-require_cmd sips
 require_cmd python3
-require_cmd /usr/libexec/java_home
+require_cmd convert
+require_cmd 7z
 
-JAVA_HOME="${JAVA_HOME:-$(/usr/libexec/java_home)}"
-java_version="$("$JAVA_HOME/bin/java" -version 2>&1 | awk -F\" '/version/ {print $2}')"
-java_major="${java_version%%.*}"
-if [[ -z "$java_major" || "$java_major" -lt 25 ]]; then
-  echo "Java 25+ required. Found: $java_version (JAVA_HOME=$JAVA_HOME)" >&2
-  exit 1
-fi
-
-cleanup() {
-  rm -rf "$runtime_dir" "$tmp_iconset" "$tmp_icns" "$classes_dir"
-}
-trap cleanup EXIT
-
-echo "Cleaning old outputs..."
-rm -rf "$app_path" "$runtime_dir"
-mkdir -p "$classes_dir" "$build_dir/libs"
-
-echo "Compiling sources..."
-"$JAVA_HOME/bin/javac" -d "$classes_dir" $(find "$repo_root/src/main/java" -name '*.java')
-cp -R "$repo_root/src/main/resources/." "$classes_dir/"
-"$JAVA_HOME/bin/jar" --create --file "$jar_path" --main-class spacemonger1.App -C "$classes_dir" .
-
-echo "Creating runtime image with jlink..."
-"$JAVA_HOME/bin/jlink" \
-  --module-path "$build_dir/libs:$JAVA_HOME/jmods" \
-  --add-modules spacemonger,java.base,java.desktop,java.prefs,java.logging,java.xml \
-  --strip-debug \
-  --no-man-pages \
-  --no-header-files \
-  --compress=2 \
-  --output "$runtime_dir"
+cd "$ROOT"
+./gradlew jar
+jlink --add-modules java.base,java.desktop,java.prefs,spacemonger \
+      --output "$BUILD_ROOT/spacemonger1" \
+      --compress zip-9 \
+      --strip-debug \
+      --no-header-files \
+      --no-man-pages \
+      --module-path "$JDK_JMODS_DIR:$ROOT/build/libs"
 
 echo "Preparing icon..."
+icon_source="$ROOT/src/main/resources/SpaceMonger_hres.png"
 if [[ ! -f "$icon_source" ]]; then
   echo "Icon not found at $icon_source" >&2
   exit 1
 fi
-tmp_iconset="$(mktemp -d "$build_dir/iconset.XXXXXX")"
-tmp_icns="$(mktemp "$build_dir/SpaceMonger.XXXXXX.icns")"
+
 for size in 16 32 64 128 256 512 1024; do
-  sips -z "$size" "$size" "$icon_source" --out "$tmp_iconset/icon_${size}x${size}.png" >/dev/null
+  convert "$icon_source" -resize "${size}x${size}^" -gravity center "$tmp_iconset/icon_${size}x${size}.png"
 done
 python3 - "$tmp_iconset" "$tmp_icns" <<'PY'
 import pathlib, struct, sys
@@ -83,10 +79,8 @@ entries = [
     ("ic09",  "icon_512x512.png"),
     ("ic10",  "icon_1024x1024.png"), # 512@2x
 ]
-
 def chunk(tag, data):
     return tag.encode("ascii") + struct.pack(">I", len(data) + 8) + data
-
 chunks = [chunk(tag, (iconset / name).read_bytes()) for tag, name in entries]
 total = 8 + sum(len(c) for c in chunks)
 with out.open("wb") as f:
@@ -96,11 +90,12 @@ with out.open("wb") as f:
         f.write(part)
 PY
 
+
 echo "Assembling app bundle..."
+
 mkdir -p "$app_path/Contents/MacOS" "$app_path/Contents/Resources" "$app_path/Contents/Runtime"
-cp "$jar_path" "$app_path/Contents/Resources/spacemonger1.jar"
-cp "$tmp_icns" "$app_path/Contents/Resources/$icon_file"
-cp -R "$runtime_dir/." "$app_path/Contents/Runtime/"
+cp "$tmp_icns" "$app_path/Contents/Resources/SpaceMonger1.icns"
+cp -R "$BUILD_ROOT/spacemonger1/." "$app_path/Contents/Runtime/"
 
 cat > "$app_path/Contents/MacOS/$app_name" <<'EOF'
 #!/bin/bash
@@ -108,9 +103,9 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 exec "$DIR/../Runtime/bin/java" \
   -Xdock:name="SpaceMonger1" \
   -Xdock:icon="$DIR/../Resources/SpaceMonger1.icns" \
-  -Xms64m \
-  -Xmx1024m \
-  -jar "$DIR/../Resources/spacemonger1.jar"
+  -XX:+UseSerialGC \
+  --enable-native-access=spacemonger \
+  -m spacemonger/spacemonger1.App
 EOF
 chmod +x "$app_path/Contents/MacOS/$app_name"
 
@@ -134,7 +129,5 @@ cat > "$app_path/Contents/Info.plist" <<'EOF'
 </plist>
 EOF
 
-echo "Computing final size..."
-du -sh "$app_path"
-
-echo "Done. App bundle at: $app_path"
+rm "$DIST_ROOT/spacemonger1-${1}-macos_x64.zip" || true
+7z a -tzip -mx=9 "$DIST_ROOT/spacemonger1-${1}-macos_x64.zip" "$app_path"
